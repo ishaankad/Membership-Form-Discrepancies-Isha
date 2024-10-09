@@ -1,0 +1,60 @@
+import re
+from csv import DictReader, DictWriter, QUOTE_MINIMAL
+
+membership_path = input("Enter the path to the membership form: ")
+payment_path = input("Enter the path to the e-store form: ")
+
+fieldnames = ["First Name", "Last Name", "Student ID", "School Email", "Type"]
+
+def search_payment(path, s_number, f_name, l_name):
+    with open(path, "r", newline="") as pform:
+        preader = DictReader(pform)
+        for row in preader:
+            s_id = re.search(r"Student ID \(no S\) : [sS]{0,1}(\d{6})", row["Additional Information"]).group(1)
+            fn = re.search(r"Student First Name : (.*), Student ID", row["Additional Information"]).group(1)
+            ln = re.search(r"Student Last Name : (.*), Student First", row["Additional Information"]).group(1)
+            if s_number == s_id or (f_name == fn and l_name == ln):
+                return True
+        return False
+
+def search_membership(path, s_number, f_name, l_name):
+    with open(path, "r", newline="") as mform:
+        mreader = DictReader(mform)
+        for row in mreader:
+            s_id = row["Student ID (without the 's')"]
+            fn = row["First Name"]
+            ln = row["Last Name"]
+            if s_number == s_id or (f_name == fn and l_name == ln):
+                return True
+        return False
+
+with open(membership_path, "r", newline="") as mform, open("discrepancies.csv", "w", newline="") as discrepancies:
+    mreader = DictReader(mform)
+    # print(mreader.fieldnames)
+    dwriter = DictWriter(discrepancies, fieldnames=fieldnames, delimiter=",", quotechar=" ", quoting=QUOTE_MINIMAL)
+    dwriter.writeheader()
+    for row in mreader:
+        if not search_payment(payment_path, row[r"Student ID (without the 's')"], row["First Name"], row["Last Name"]):
+            dwriter.writerow({
+                "First Name": row["First Name"].strip(),
+                "Last Name": row["Last Name"].strip(),
+                "Student ID": row["Student ID (without the 's')"].strip(),
+                "School Email": row["Email Address"],
+                "Type": "Needs RRISDPay",
+            })
+
+with open(payment_path, "r", newline="") as pform, open("discrepancies.csv", "a", newline="") as discrepancies:
+    preader = DictReader(pform)
+    dwriter = DictWriter(discrepancies, fieldnames=fieldnames, delimiter=",", quotechar=" ", quoting=QUOTE_MINIMAL)
+    for row in preader:
+        s_id = re.search(r"Student ID \(no S\) : [sS]{0,1}(\d{6})", row["Additional Information"]).group(1)
+        fn = re.search(r"Student First Name : (.*), Student ID", row["Additional Information"]).group(1)
+        ln = re.search(r"Student Last Name : (.*), Student First", row["Additional Information"]).group(1)
+        if not search_membership(membership_path, s_id, fn, ln):
+            dwriter.writerow({
+                "First Name": fn.strip(),
+                "Last Name": ln.strip(),
+                "Student ID": s_id.strip(),
+                "School Email": f"s{s_id}@student.roundrockisd.org".strip(),
+                "Type": "Needs Membership Form",
+            })
